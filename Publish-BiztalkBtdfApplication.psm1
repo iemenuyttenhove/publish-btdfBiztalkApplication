@@ -216,7 +216,7 @@ function unpublish-btdfbiztalkapplication() {
     $script:loglevel = get-loglevel
 
     Write-Host "Step: Umdeploying existing biztalk app $BiztalkBtdfApp"
-    undeploy-btdfBiztalkApp  -biztalkAppName $biztalkApplicationName -btdfProductName $btdfProductName -isFirstBiztalkServer $ImportIntoBiztalkMgmtDb  -msbuildExePath $msbuildPath -backupdir $backupDir -undeployDependentApps $undeployDependentApps
+    undeploy-btdfBiztalkApp -biztalkAppName $biztalkApplicationName -btdfProductName $btdfProductName -isFirstBiztalkServer $ImportIntoBiztalkMgmtDb -msbuildExePath $msbuildPath -backupdir $backupDir -undeployDependentApps $undeployDependentApps
 
     Write-Host "Step: Uninstalling existing biztalk app $BiztalkBtdfApp"
     uninstall-btdfBiztalkApp $btdfProductName
@@ -250,7 +250,7 @@ function get-dependentbiztalkapps() {
 
     #The result also contains the biztalk app name who dependents we are looking for..
     if ($result.Contains($biztalkAppName) -and $result[$($result.Count - 1)] -eq $biztalkAppName) {
-        $result.Remove($biztalkAppName)
+        $null = $result.Remove($biztalkAppName)
     }
 
     return [array]$result
@@ -610,6 +610,7 @@ function undeploy-btdfBiztalkApp() {
 
         #getDependant applications
         [array]$dependantApps = [array]$(get-dependentbiztalkapps $biztalkAppName $mgmtServerDb[0] $mgmtServerDb[1])
+        $tmpAppsToCheckActiveInstances = $dependantApps + @($biztalkAppName)
 
         if (Test-MessagBoxInstances $tmpAppsToCheckActiveInstances $mgmtServerDb[0] $mgmtServerDb[1]) {
             Write-Error "One or more dependent applications cannot be undeployed. There are active instances associated with one or more applications in $dependentAppsToUndeploy.."
@@ -622,11 +623,11 @@ function undeploy-btdfBiztalkApp() {
         if ($undeployDependentApps) {
             undeploy-DependentBiztalkApps $biztalkAppName $isFirstBiztalkServer $backupdir
         }
-        else {
+        elseif ($null -ne $dependantApps) {
             Write-Verbose "Dependent apps $dependantApps"
 
-            if ($dependantApps.Count -gt 0) {
-                Write-Error "The biztalk application $biztalkAppName cannot be undeployed as there are other applications that depend on it. To undeploy dependent applications, set the undeployDependentApps option to true. Or manually remove the apps $dependantApps "
+            if (($dependantApps -is [array] -and $dependantApps.Count -gt 0) -or ($dependantApps -is [Int32] -and $dependantApps -gt 0)) {
+                Write-Error "The biztalk application $biztalkAppName cannot be undeployed as there are other applications that depend on it. To undeploy dependent applications, set the undeployDependentApps option to true. Or manually remove the apps $dependantApps"
             }
         }
 
@@ -772,7 +773,7 @@ function Test-MessagBoxInstances() {
     }
 
     [array]$activeInstances = $serviceInstances | Where-Object {$biztalkApplications.Contains($_.Application) -and $_.Messages.Count -gt 0} | Group-Object Application, InstanceStatus, ServiceType | Select-Object Name, Count
-    Write-Host "Active Instances Count $activeInstances.Count: " ($activeInstances | Format-Table -auto | Out-String)
+    Write-Host "Active applications $($activeInstances.Length), service instances: " ($activeInstances | Format-Table -auto | Out-String)
 
     return $($activeInstances.Count -gt 0)
 }
@@ -908,7 +909,7 @@ function Start-Command() {
         throw $webdeployerrorsMessage
     }
 
-    Write-Host "$commandToStart completed with exit code $process.ExitCode"
+    Write-Host "$commandToStart completed with exit code $($process.ExitCode)"
     if ($process.ExitCode -ne 0) {
         Write-Error "Script $commandToStart failed. see log for errors"
     }
@@ -979,7 +980,7 @@ function get-dependentbiztalkappsrecurse() {
         [System.Collections.ArrayList] $dependencylist = @()
     )
     Write-Verbose "Checking dependency for $biztalkAppName on server $managmentDbServer"
-    $apps = dependentbiztalkappslevelone $biztalkAppName $managmentDbServer
+    $apps = get-dependentbiztalkappslevelone $biztalkAppName $managmentDbServer $managementDb
     Write-Verbose  "Dependents for $biztalkAppName : $apps"
 
     #No other apps depends on this one. Time to exit..
@@ -989,7 +990,7 @@ function get-dependentbiztalkappsrecurse() {
             return [array] $dependencylist
         }
 
-        $dependencylist.Add($biztalkAppName)
+        $null = $dependencylist.Add($biztalkAppName)
         return [array]$dependencylist
     }
 
@@ -998,13 +999,13 @@ function get-dependentbiztalkappsrecurse() {
         $moewdpends = get-dependentbiztalkappsrecurse $app $managmentDbServer $managementDb $dependencylist
         $appsToadd = get-itemsnotinlist $dependencylist $moewdpends
         if ($appsToadd.Count -gt 0) {
-            $dependencylist.AddRange($appsToadd)
+            $null = $dependencylist.AddRange($appsToadd)
         }
     }
 
     #All depdencies added, now add the app to the list at the end
     if (-not $dependencylist.Contains($biztalkAppName)) {
-        $dependencylist.Add($biztalkAppName)
+        $null = $dependencylist.Add($biztalkAppName)
     }
 
     return [array]$dependencylist
