@@ -125,7 +125,7 @@ function Publish-BTDFBiztalkApplication() {
         install-btdfBiztalkApp  $BiztalkMsi -installDir $installdir  -installOptions $installOptions
 
         Write-Host "Step: Deploying biztalk app $btdfProductName"
-        deploy-btdfBiztalkApp -btdfProductName $btdfProductName -isLastBiztalkServer $ImportIntoBiztalkMgmtDb -msbuildExePath $msbuildPath -deployOptionsNameValuePairs $deployOptions 
+        deploy-btdfBiztalkApp -btdfProductName $btdfProductName -isLastBiztalkServer $ImportIntoBiztalkMgmtDb -msbuildExePath $msbuildPath -deployOptionsNameValuePairs $deployOptions
 
         Write-Host "------------------------------------------------------------------"
         Write-Host "Completed installing $btdfProductName using MSI $BiztalkMsi"
@@ -160,19 +160,19 @@ function Publish-BTDFBiztalkApplication() {
     http://thoughtsofmarcus.blogspot.com.au/2010/10/find-all-possible-parameters-for-msi.html
 
 
-.EXAMPLE 
+.EXAMPLE
     unpublish-btdfBiztalkApplication   -biztalkApplicationName DeploymentFramework.Samples.BasicMasterBindings -BtdfProductName "Deployment Framework for BizTalk - BasicMasterBindings"   -backupDir c:\mybackupdir -importIntoBiztalkMgmtDb 1  -undeployDependentApps 1
     This uninstalls the  BTDF Biztalk application product "Deployment Framework for BizTalk - BasicMasterBindings" with biztalk app name  "DeploymentFramework.Samples.BasicMasterBindings".  The undeployDependentApps option also undeploys all dependents apps
- 
-.EXAMPLE 
+
+.EXAMPLE
     unpublish-btdfBiztalkApplication  -whatif
     To run this script with the awesome whatif switch
-  
+
 .EXAMPLE
     unpublish-btdfBiztalkApplication  -verbose
     To run this script with increased logging use the -verbose switch
 
-.EXAMPLE 
+.EXAMPLE
     unpublish-btdfBiztalkApplication  -msbuildPath "C:\Program Files (x86)\MSBuild\12.0\Bin\msbuild.exe" -btsTaskPath "$env:systemdrive\Program Files (x86)\Microsoft BizTalk Server 2013 R2\BtsTask.exe"
     Customises the paths of msbuild and btstask
 
@@ -201,7 +201,7 @@ function unpublish-btdfbiztalkapplication() {
         #Note: There is no need to specify the default variable BT_DEPLOY_MGMT_DB in here, as it is already captured as part of $importIntoBiztalkMgmtDb
         [hashtable]$undeployOptions = $NULL,
 
-        #This is the BtsTaskPath. 
+        #This is the BtsTaskPath.
         [string]$btsTaskPath = "$env:systemdrive\Program Files (x86)\Microsoft BizTalk Server 2016\BtsTask.exe",
 
         #This is the msbuild path.
@@ -446,7 +446,7 @@ function install-btdfBiztalkApp() {
 
         #what if check
         if ($pscmdlet.ShouldProcess("$env:computername", "cmd $args")) {
-            run-command "cmd" $args
+            Start-Command "cmd" $args
         }
     }
     catch {
@@ -498,7 +498,7 @@ function deploy-btdfBiztalkApp() {
         $msbuildloglevel = get-msbuildloglevel $script:loglevel
         $arg = @([System.String]::Format("/c @echo on & cd /d ""{0}"" & ""{1}"" /p:Interactive=False  /t:Deploy /clp:NoSummary /nologo   /tv:4.0 {2} /v:{5} /p:DeployBizTalkMgmtDB={3} /p:Configuration=Server {4}", $installStartInDir, $msbuildExePath, $projectFile, $isLastBiztalkServer, $addtionalDeployOptions, $msbuildloglevel))
 
-        Run-Command "cmd" $arg
+        Start-Command "cmd" $arg
         Write-Host "Application $btdfBiztalkAppName deployed"
     }
     finally {
@@ -656,13 +656,13 @@ function undeploy-btdfBiztalkApp() {
         $projectFile = get-btdfProjectFileName  $undeployShortCut
 
         $addtionalunDeployOptions = flatten-keyValues $undeployOptionsNameValuePairs
-        $msbuildloglevel = get-msbuildloglevel $script:loglevel 
+        $msbuildloglevel = get-msbuildloglevel $script:loglevel
         $stdErrorLog = Join-Path $([System.IO.Path]::GetTempPath()) $([System.Guid]::NewGuid().ToString())
         $arg = @([System.String]::Format("/c @echo on & cd /d ""{0}"" & ""{1}""  /p:Interactive=False  /p:ContinueOnError=FALSE /t:Undeploy /clp:NoSummary /nologo  /verbosity:{5}  /tv:4.0 {2} /p:DeployBizTalkMgmtDB={3} /p:Configuration=Server {4}", $installDirStartIn, $msbuildExePath, $projectFile, $isFirstBiztalkServer, $addtionalunDeployOptions, $msbuildloglevel))
 
         #what if check
         if ($pscmdlet.ShouldProcess("$env:computername", "cmd $arg")) {
-            run-command "cmd" $arg
+            Start-Command "cmd" $arg
         }
 
         Write-Host "Application $biztalkAppName undeployed"
@@ -738,7 +738,7 @@ function uninstall-btdfBiztalkApp() {
 
             #what if check
             if ($pscmdlet.ShouldProcess("$env:computername", "$msiUninstallCmd")) {
-                Run-Command "cmd" "/c $msiUninstallCmd /quiet"
+                Start-Command "cmd" "/c $msiUninstallCmd /quiet"
             }
         }
         else {
@@ -801,7 +801,7 @@ function backup-BiztalkApp() {
 
         #whatif
         if ($pscmdlet.ShouldProcess("$env:computername", "cmd $exportMsiCmd")) {
-            Run-Command "cmd" $exportMsiCmd
+            Start-Command "cmd" $exportMsiCmd
         }
 
         #use bts task to export app bindings
@@ -809,7 +809,7 @@ function backup-BiztalkApp() {
 
         #whatif
         if ($pscmdlet.ShouldProcess("$env:computername", "cmd $exportBindingsCmd")) {
-            Run-Command "cmd" "$exportBindingsCmd"
+            Start-Command "cmd" "$exportBindingsCmd"
         }
 
         Write-Host "Completed backing up $BiztalkAppName"
@@ -837,7 +837,7 @@ function Remove-BiztalkApp() {
         $removeAppCmd = @([System.String]::Format("/c echo Removing biztalk app using btstask... & ""{0}""  removeapp    /ApplicationName:""{1}"" ", $BtsTaskPath, $BiztalkAppName))
 
         if ($pscmdlet.ShouldProcess("$env:computername", "$removeAppCmd")) {
-            Run-Command "cmd" $removeAppCmd
+            Start-Command "cmd" $removeAppCmd
         }
 
         Write-Host "Completed removing $BiztalkAppName using btstask"
@@ -854,7 +854,7 @@ function get-biztalkManagementServer() {
     $exportedSettingsFile = Join-Path $([System.IO.Path]::GetTempPath())  $([System.Guid]::NewGuid().ToString() + ".xml")
     $exportBiztalkSettingsCmd = [System.String]::Format("/c echo Getting biztalk settings using BTSTask & ""{0}""  exportsettings -Destination:""{1}""", $BiztalkTaskPath, $exportedSettingsFile)
 
-    Run-Command "cmd" $exportBiztalkSettingsCmd
+    Start-Command "cmd" $exportBiztalkSettingsCmd
 
     [xml]$XmlDocument = Get-Content -Path $exportedSettingsFile
     [string]$server = $XmlDocument.Settings.ExportedGroup
@@ -875,7 +875,7 @@ function test-biztalkAppExists() {
         $stdOutLog = Join-Path $([System.IO.Path]::GetTempPath())  $([System.Guid]::NewGuid().ToString())
         $ListBiztalkAppCmd = [System.String]::Format("/c echo  & ""{0}""  ListApps > ""{1}""", $BtsTaskPath, $stdOutLog)
 
-        Run-Command "cmd" $ListBiztalkAppCmd
+        Start-Command "cmd" $ListBiztalkAppCmd
         $biztalkAppslist = Get-Content $stdOutLog | Out-String
         $appNameRegex = "-ApplicationName=""$BiztalkAppName"""
         $appExists = $biztalkAppslist -match $appNameRegex
@@ -886,7 +886,7 @@ function test-biztalkAppExists() {
         # do nothing
     }
 }
-function run-command() {
+function Start-Command() {
     param(
         [Parameter(Mandatory = $True)]
         [string]$commandToStart,
