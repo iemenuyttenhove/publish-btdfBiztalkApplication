@@ -125,7 +125,7 @@ function Publish-BTDFBiztalkApplication() {
         install-btdfBiztalkApp  $BiztalkMsi -installDir $installdir  -installOptions $installOptions
 
         Write-Host "Step: Deploying biztalk app $btdfProductName"
-        deploy-btdfBiztalkApp -btdfProductName $btdfProductName -isLastBiztalkServer $ImportIntoBiztalkMgmtDb -msbuildExePath $msbuildPath -deployOptionsNameValuePairs $deployOptions
+        deploy-btdfBiztalkApp -btdfProductName $btdfProductName -importIntoBiztalkMgmtDb $ImportIntoBiztalkMgmtDb -msbuildExePath $msbuildPath -deployOptionsNameValuePairs $deployOptions
 
         Write-Host "------------------------------------------------------------------"
         Write-Host "Completed installing $btdfProductName using MSI $BiztalkMsi"
@@ -425,18 +425,59 @@ function get-shortcutProperties() {
     }
 }
 
+<#
+.SYNOPSIS
+    Installs the new version of biztalk MSI created using BTDF
+
+.DESCRIPTION
+    This script is used as a step during the deploy script, but can be called individually to be able to run SettingsFileGenerator and replace 
+    settings for the current environment using Octopus variables. After using this step directly, you should call deploy-btdfBiztalkApp to continue the BTDF process.
+
+    This script was tested with Biztalk 2016 and BTDF Release 5.7
+
+.INPUTS
+    None
+
+.OUTPUTS
+    None
+
+
+ .LINK
+    https://github.com/eloekset/publish-btdfBiztalkApplication forked from https://github.com/elangovana/publish-btdfBiztalkApplication
+
+.EXAMPLE
+
+    install-btdfBiztalkApp -biztalkMsi "C:\mybtdfMsi.msi" -installdir "C:\program files\mybtdfMsi" -installOptions @{<msiexec parameters>}
+
+    This installs BTDF Biztalk application MSI C:\mybtdfMsi.msi, into install directory C:\program files\mybtdfMsi.
+
+.EXAMPLE
+
+    install-btdfBiztalkApp -whatif
+
+    To run this script with the awesome whatif switch
+
+.EXAMPLE
+
+    install-btdfBiztalkApp -verbose
+    To run this script with increased logging use the -verbose switch
+
+#>
 function install-btdfBiztalkApp() {
     [CmdletBinding(SupportsShouldProcess = $true)]
     param(
+        # The path of biztalk MSI created using BTDF
         [Parameter(Mandatory = $True)]
         [string]$BiztalkAppMSI,
 
+        # The directory into which the MSI needs to be installed
         [Parameter(Mandatory = $True)]
         [string]$installDir,
 
+        #This is a hash table of key-value pairs of install options. This is the list of public properties available when installing an MSI.
         [hashtable]$installOptions = $null
     )
-
+    $script:loglevel = get-loglevel
     $stdOutLog = Join-Path $([System.IO.Path]::GetTempPath())  $([System.Guid]::NewGuid().ToString())
     $additionalInstallProperties = flatten-keyValues $installOptions
 
@@ -459,18 +500,64 @@ function install-btdfBiztalkApp() {
     write-host $msiOutput
 }
 
+<#
+.SYNOPSIS
+    Deploys an already installed BizTalk application created using BTDF
+
+.DESCRIPTION
+    This script is used as a step during the deploy script, but can be called individually to be able to run SettingsFileGenerator and replace 
+    settings for the current environment using Octopus variables. Before using this step directly, you must call install-btdfBiztalkApp to install the MSI.
+
+    This script was tested with Biztalk 2016 and BTDF Release 5.7
+
+.INPUTS
+    None
+
+.OUTPUTS
+    None
+
+
+ .LINK
+    https://github.com/eloekset/publish-btdfBiztalkApplication forked from https://github.com/elangovana/publish-btdfBiztalkApplication
+
+.EXAMPLE
+
+    deploy-btdfBiztalkApp -BtdfProductName "Deployment Framework for BizTalk - BasicMasterBindings" -importIntoBiztalkMgmtDb 1 -deployOptions @{"/p:VDIR_USERNAME"="contoso\adam";"/p:VDIR_USERPASS"="@5t7sd";"/p:ENV_SETTINGS"="""c:\program files\mybtdfMsi\Deployment\PortBindings.xml"""}
+
+    This installs BTDF Biztalk application MSI C:\mybtdfMsi.msi, into install directory C:\program files\mybtdfMsi. in this example, the custom deploy options,  VDIR_USERNAME, VDIR_USERPASS and ENV_SETTINGS are the only deployment options required to deploy the app.
+
+    Note how the value of one of the BTDF deploy options, "/p:ENV_SETTINGS", is double quoted twice """c:\program files\mybtdfMsi\Deployment\PortBindings.xml""". Please make sure values with spaces are double quoted twice in the deploy, undeploy and install options hastable
+
+.EXAMPLE
+
+    deploy-btdfBiztalkApp -whatif
+
+    To run this script with the awesome whatif switch
+
+.EXAMPLE
+
+    deploy-btdfBiztalkApp -verbose
+    To run this script with increased logging use the -verbose switch
+
+#>
 function deploy-btdfBiztalkApp() {
     [CmdletBinding(SupportsShouldProcess = $true)]
     param(
+        # The name of the BTDF product name as specified in the btdf project file property <ProductName>..</ProductName>.
         [Parameter(Mandatory = $True)]
         [string]$btdfProductName,
 
+        # This option is useful for deploying in clustered biztalk server environments. Set this to false when installing on all servers except the last one within the clustered environment.
         [Parameter(Mandatory = $True)]
-        [boolean]$isLastBiztalkServer,
+        [boolean]$importIntoBiztalkMgmtDb,
 
-        [Parameter(Mandatory = $True)]
-        [string]$msbuildExePath,
+        # This is the msbuild path.
+        [Parameter(Mandatory = $False)]
+        [string]$msbuildExePath = "$env:systemdrive\Windows\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe",
 
+        # This is a hash table of key-value pairs of deploy options that the BTDF deploy UI walks you through. This hash table of custom variables must contain all variables specified in the installwizard.xml of your BTDF project, including the port bindings file.
+        # At a bare minimum you will need to specify the port bindings file. Please make sure that the values with spaces are quoted correctly, for further details see examples.
+        # Note: There is no need to specify the default variable BT_DEPLOY_MGMT_DB in here, as it is already captured as part of $isLastBiztalkServer.
         [hashtable]$deployOptionsNameValuePairs = $null
     )
     Write-Host "********Deploying biztalk app $btdfProductName ......."
@@ -496,7 +583,7 @@ function deploy-btdfBiztalkApp() {
 
         $stdErrorLog = [System.IO.Path]::GetTempFileName()
         $msbuildloglevel = get-msbuildloglevel $script:loglevel
-        $arg = @([System.String]::Format("/c @echo on & cd /d ""{0}"" & ""{1}"" /p:Interactive=False  /t:Deploy /clp:NoSummary /nologo   /tv:4.0 {2} /v:{5} /p:DeployBizTalkMgmtDB={3} /p:Configuration=Server {4}", $installStartInDir, $msbuildExePath, $projectFile, $isLastBiztalkServer, $addtionalDeployOptions, $msbuildloglevel))
+        $arg = @([System.String]::Format("/c @echo on & cd /d ""{0}"" & ""{1}"" /p:Interactive=False  /t:Deploy /clp:NoSummary /nologo   /tv:4.0 {2} /v:{5} /p:DeployBizTalkMgmtDB={3} /p:Configuration=Server {4}", $installStartInDir, $msbuildExePath, $projectFile, $importIntoBiztalkMgmtDb, $addtionalDeployOptions, $msbuildloglevel))
 
         Start-Command "cmd" $arg
         Write-Host "Application $btdfBiztalkAppName deployed"
@@ -887,20 +974,60 @@ function test-biztalkAppExists() {
         # do nothing
     }
 }
+
+<#
+.SYNOPSIS
+    Runs Start-Process with a bit of logging and error handling
+
+.DESCRIPTION
+    This script is called several places internally, but is exported for ruse directly from Octopus.
+
+.INPUTS
+    None
+
+.OUTPUTS
+    None
+
+ .LINK
+    https://github.com/eloekset/publish-btdfBiztalkApplication forked from https://github.com/elangovana/publish-btdfBiztalkApplication
+
+.EXAMPLE
+
+    Start-Command -commandToStart "msiexec.exe" -arguments "/i C:\mybtdfMsi.msi"
+
+    This installs BTDF Biztalk application MSI C:\mybtdfMsi.msi.
+
+.EXAMPLE
+
+    Start-Command -verbose
+    To run this script with increased logging use the -verbose switch
+
+#>
 function Start-Command() {
     param(
+        # Command to start
         [Parameter(Mandatory = $True)]
         [string]$commandToStart,
 
+        # Arguments to be passed to the command
         [Parameter(Mandatory = $True)]
-        [array]$arguments
+        [array]$arguments,
+
+        # Set WorkingDirectory to save characters for relative paths
+        [Parameter(Mandatory = $False)]
+        [string]$workingDirectory = $null
     )
     $stdErrLog = Join-Path $([System.IO.Path]::GetTempPath()) $([System.Guid]::NewGuid().ToString())
     $stdOutLog = Join-Path $([System.IO.Path]::GetTempPath()) $([System.Guid]::NewGuid().ToString())
     Write-Host "Executing command ... $commandToStart"
     Write-Verbose "Executing command ... $commandToStart"
 
-    $process = Start-Process $commandToStart -ArgumentList $arguments -RedirectStandardOutput $stdOutLog -RedirectStandardError $stdErrLog -wait -PassThru
+    if ([System.String]::IsNullOrEmpty($workingDirectory)) {
+        $process = Start-Process $commandToStart -ArgumentList $arguments -RedirectStandardOutput $stdOutLog -RedirectStandardError $stdErrLog -wait -PassThru        
+    } else {
+        $process = Start-Process $commandToStart -ArgumentList $arguments -WorkingDirectory $workingDirectory -RedirectStandardOutput $stdOutLog -RedirectStandardError $stdErrLog -wait -PassThru
+    }
+    
     Get-Content $stdOutLog | Write-Host
 
     #throw errors if any
@@ -913,6 +1040,69 @@ function Start-Command() {
     if ($process.ExitCode -ne 0) {
         Write-Error "Script $commandToStart failed. see log for errors"
     }
+}
+
+<#
+.SYNOPSIS
+    Runs EnvironmentSettingsExporter.exe and returns the path to the folder of the exported files.
+
+.DESCRIPTION
+    This script should be called before using Octopus Substitute Variables in Files community step: https://octopus.com/docs/deployment-process/configuration-features/substitute-variables-in-files
+
+.INPUTS
+    None
+
+.OUTPUTS
+    Path to folder where exported environment settings files are stored.
+
+
+ .LINK
+    https://github.com/eloekset/publish-btdfBiztalkApplication forked from https://github.com/elangovana/publish-btdfBiztalkApplication
+
+.EXAMPLE
+
+    Export-EnvironmentSettings -installDir "C:\Octopus\Applications\..."
+
+    This exports environment settings to a relative path default for BTDF.
+
+.EXAMPLE
+
+    Export-EnvironmentSettings -installDir "C:\Octopus\Applications\..." -verbose
+    To run this script with increased logging use the -verbose switch
+
+#>
+function Export-EnvironmentSettings() {
+    param(
+        # Command to start
+        [Parameter(Mandatory = $True)]
+        [string]$installDir
+    )
+    #Run EnvironmentSetttingsExporter.exe to genereate xml file for environment 
+    #to replace its values with matching Octopus variables
+    Write-Host "Export environment settings using BTDF"
+    Write-Verbose "installDir = $installDir"
+
+    ##Tools expected to be found at Deployment\Framework\DeployTools
+    $envSettingsExporterPath = "Deployment\Framework\DeployTools\EnvironmentSettingsExporter.exe"
+    $envSettingsExporterPath = Join-Path $installDir $envSettingsExporterPath
+    Write-Verbose "envSettingsExporterPath = $envSettingsExporterPath"
+
+    ##Export settings to Deployment\EnvironmentSettings
+    $envSettingsDirPath = "Deployment\EnvironmentSettings"
+    Write-Verbose "envSettingsDirPath = $envSettingsDirPath"
+    $settingsFileGeneratorPath = Join-Path $envSettingsDirPath "SettingsFileGenerator.xml"
+    Write-Verbose "settingsFileGeneratorPath = $settingsFileGeneratorPath"
+    $arg = @("""$settingsFileGeneratorPath"" ""$envSettingsDirPath"" ")
+
+    #TODO: Include this what if check when exporting this into the PowerShell module:
+    #what if check
+    #if ($pscmdlet.ShouldProcess("$env:computername", "cmd $arg")) {
+    Start-Command $envSettingsExporterPath $arg -WorkingDirectory $installDir
+    #}
+
+    $returnPath = Join-Path $installDir $envSettingsDirPath
+    Write-Verbose "returnPath = $returnPath"
+    return $returnPath
 }
 
 function get-dependentbiztalkappslevelone() {
@@ -1013,3 +1203,7 @@ function get-dependentbiztalkappsrecurse() {
 
 Export-ModuleMember -function publish-btdfBiztalkApplication
 Export-ModuleMember -function unpublish-btdfBiztalkApplication
+Export-ModuleMember -function install-btdfBiztalkApp
+Export-ModuleMember -function deploy-btdfBiztalkApp
+Export-ModuleMember -function Start-Command
+Export-ModuleMember -function Export-EnvironmentSettings
