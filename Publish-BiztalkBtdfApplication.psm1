@@ -50,7 +50,7 @@
     To run this script with increased logging use the -verbose switch
 
 .EXAMPLE
-    publish-btdfBiztalkApplication  -msbuildPath "C:\Program Files (x86)\MSBuild\12.0\Bin\msbuild.exe" -btsTaskPath "$env:systemdrive\Program Files (x86)\Microsoft BizTalk Server 2013 R2\BtsTask.exe"
+    publish-btdfBiztalkApplication  -msbuildPath "C:\Program Files (x86)\MSBuild\12.0\Bin\msbuild.exe" -btsTaskPath "$env:systemdrive\Program Files (x86)\Microsoft BizTalk Server 2013 R2\BTSTask.exe"
     Customises the paths of msbuild and btstask
 
 #>
@@ -100,7 +100,7 @@ function Publish-BTDFBiztalkApplication() {
         [boolean]$uninstallExistingVersion = $True,
 
         #This is the BtsTaskPath.
-        [string]$btsTaskPath = "$env:systemdrive\Program Files (x86)\Microsoft BizTalk Server 2016\BtsTask.exe",
+        [string]$btsTaskPath = "$env:systemdrive\Program Files (x86)\Microsoft BizTalk Server 2013 R2\BTSTask.exe",
 
         #This is the msbuild path.
         [string]$msbuildPath = "$env:systemdrive\Windows\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe",
@@ -173,7 +173,7 @@ function Publish-BTDFBiztalkApplication() {
     To run this script with increased logging use the -verbose switch
 
 .EXAMPLE
-    unpublish-btdfBiztalkApplication  -msbuildPath "C:\Program Files (x86)\MSBuild\12.0\Bin\msbuild.exe" -btsTaskPath "$env:systemdrive\Program Files (x86)\Microsoft BizTalk Server 2013 R2\BtsTask.exe"
+    unpublish-btdfBiztalkApplication  -msbuildPath "C:\Program Files (x86)\MSBuild\12.0\Bin\msbuild.exe" -btsTaskPath "$env:systemdrive\Program Files (x86)\Microsoft BizTalk Server 2013 R2\BTSTask.exe"
     Customises the paths of msbuild and btstask
 
 #>
@@ -202,7 +202,7 @@ function unpublish-btdfbiztalkapplication() {
         [hashtable]$undeployOptions = $NULL,
 
         #This is the BtsTaskPath.
-        [string]$btsTaskPath = "$env:systemdrive\Program Files (x86)\Microsoft BizTalk Server 2016\BtsTask.exe",
+        [string]$btsTaskPath = "$env:systemdrive\Program Files (x86)\Microsoft BizTalk Server 2013 R2\BTSTask.exe",
 
         #This is the msbuild path.
         [string]$msbuildPath = "$env:systemdrive\Windows\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe",
@@ -215,7 +215,7 @@ function unpublish-btdfbiztalkapplication() {
     $script:btsTaskPath = $btsTaskPath
     $script:loglevel = get-loglevel
 
-    Write-Host "Step: Umdeploying existing biztalk app $BiztalkBtdfApp"
+    Write-Host "Step: Undeploying existing biztalk app $BiztalkBtdfApp"
     undeploy-btdfBiztalkApp -biztalkAppName $biztalkApplicationName -btdfProductName $btdfProductName -isFirstBiztalkServer $ImportIntoBiztalkMgmtDb -msbuildExePath $msbuildPath -backupdir $backupDir -undeployDependentApps $undeployDependentApps
 
     Write-Host "Step: Uninstalling existing biztalk app $BiztalkBtdfApp"
@@ -234,7 +234,7 @@ function get-dependentbiztalkapps() {
         [string] $managementDb = "",
 
         #This is the BtsTaskPath.
-        [string]$btsTaskPath = "$env:systemdrive\Program Files (x86)\Microsoft BizTalk Server 2016\BtsTask.exe"
+        [string]$btsTaskPath = "$env:systemdrive\Program Files (x86)\Microsoft BizTalk Server 2013 R2\BTSTask.exe"
     )
 
     $script:btsTaskPath = $btsTaskPath
@@ -938,7 +938,7 @@ function get-biztalkManagementServer() {
     param(
         [string]$BiztalkTaskPath = $btsTaskPath
     )
-    Write-Host "Get Biztallk Management server"
+    Write-Host "Get BizTalk Management server"
     $exportedSettingsFile = Join-Path $([System.IO.Path]::GetTempPath())  $([System.Guid]::NewGuid().ToString() + ".xml")
     $exportBiztalkSettingsCmd = [System.String]::Format("/c echo Getting biztalk settings using BTSTask & ""{0}""  exportsettings -Destination:""{1}""", $BiztalkTaskPath, $exportedSettingsFile)
 
@@ -961,7 +961,7 @@ function test-biztalkAppExists() {
     try {
         #use bts task to list apps
         $stdOutLog = Join-Path $([System.IO.Path]::GetTempPath())  $([System.Guid]::NewGuid().ToString())
-        $ListBiztalkAppCmd = [System.String]::Format("/c echo  & ""{0}""  ListApps > ""{1}""", $BtsTaskPath, $stdOutLog)
+        $ListBiztalkAppCmd = [System.String]::Format("""/c echo  & ""{0}""  ListApps > ""{1}""", $BtsTaskPath, $stdOutLog)
 
         Start-Command "cmd" $ListBiztalkAppCmd
         $biztalkAppslist = Get-Content $stdOutLog | Out-String
@@ -1023,7 +1023,7 @@ function Start-Command() {
     Write-Verbose "Executing command ... $commandToStart"
 
     if ([System.String]::IsNullOrEmpty($workingDirectory)) {
-        $process = Start-Process $commandToStart -ArgumentList $arguments -RedirectStandardOutput $stdOutLog -RedirectStandardError $stdErrLog -wait -PassThru        
+        $process = Start-Process $commandToStart -ArgumentList $arguments -RedirectStandardOutput $stdOutLog -RedirectStandardError $stdErrLog -wait -PassThru
     } else {
         $process = Start-Process $commandToStart -ArgumentList $arguments -WorkingDirectory $workingDirectory -RedirectStandardOutput $stdOutLog -RedirectStandardError $stdErrLog -wait -PassThru
     }
@@ -1204,6 +1204,12 @@ function get-dependentbiztalkappslevelone() {
     if (!(Get-module "SqlServer")) {
         Import-Module "SqlServer" -DisableNameChecking
     }
+	
+	if($managementDb -like '\\')
+	{
+		$managementDb = $managementDb -replace "\\", "\"
+	}
+	
     $appsdatarow = Invoke-Sqlcmd -ServerInstance $managmentDbServer -Query $cmd -Database $managementdb
 
     return [array]$appsdatarow.apps
